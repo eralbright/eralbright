@@ -343,7 +343,6 @@ def sensorPage() {
 
 def updated() {
     logInfo("Updated Event Received...")
-    getHeaderAndFooter()
     unsubscribe()
     setVersion()
     logInfo ("house average ...")
@@ -937,10 +936,7 @@ def getFormat(type, myText="") {			// Modified from @Stephack Code
 def display() {
     setVersion()
     getHeaderAndFooter()
-    theName = app.label
-    if(theName == null || theName == "") theName = "New Child App"
-    if (state.name == theName) {theName = ""} else {theName = " - " + theName}
-    section (getFormat("title", "${getImage("logo")}" + " ${state.name}${theName}")) {
+    section (getFormat("title", "${getImage("logo")}" + " ${appDescriptionFLD}")) {
         paragraph "${state.headerMessage}"
 		paragraph getFormat("line")
 	}
@@ -949,13 +945,13 @@ def display() {
 def display2() {
 	section() {
 		paragraph getFormat("line")
-		paragraph "<div style='color:#1A77C9;text-align:center;font-size:20px;font-weight:bold'>${state.name} - ${state.version}</div>"
+		paragraph "<div style='color:#1A77C9;text-align:center;font-size:20px;font-weight:bold'>${appDescriptionFLD} - ${appVersionFLD}</div>"
         paragraph "${state.footerMessage}"
 	}       
 }
 
 def getHeaderAndFooter() {
-    logTrace ("In getHeaderAndFooter (${state.version})")
+    logTrace ("In getHeaderAndFooter (${appVersionFLD})")
     def params = [
 	    uri: "https://raw.githubusercontent.com/eralbright/eralbright/hubitat/headfoot.json",
 		requestContentType: "application/json",
@@ -974,6 +970,6 @@ def getHeaderAndFooter() {
     }
     catch (e) {
         state.headerMessage = "<div style='color:#1A77C9'>Kokopelli Home Automation</div>"
-        state.footerMessage = "<div style='color:#1A77C9;text-align:center'>${state.namespace}  <<-->>  Kokopelli<br></div>"
+        state.footerMessage = "<div style='color:#1A77C9;text-align:center'>${appVersionFLD} : ${appModifiedFLD}  <<-->>  Kokopelli<br></div>"
     }
 }
