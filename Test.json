@@ -1,4 +1,4 @@
 {
-"headerMessage": "<div style='color:#1A77C9'><a href='https://github.com/eralbright' target='_blank'>Kokopelli Home Automation</a> - BIG update to Bundle Manager and how apps report their versions for more.</div>",
-   "footerMessage": "<div style='color:#1A77C9;text-align:center'>Kokopelli Home Automation </div>",
+"headerMessage": "<div style='color:#1A77C9'>Kokopelli Home Automation</div>>",
+   "footerMessage": "<div style='color:#1A77C9;text-align:center'>${state.namespace}  <<-->>  Kokopelli<br></div>",
 }
