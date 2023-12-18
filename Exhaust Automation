@@ -1,0 +1,979 @@
+/** Exhaust Fan Control
+ *
+ *  Copyright 2023 Eric Albright - Kokopelli Home Automation - 
+ *                 - most of this is copied from research sources and other operating programs as I learn
+ *                   so Copied. Right.
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ *  in compliance with the License. You may obtain a copy of the License at:
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
+ *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+ *  for the specific language governing permissions and limitations under the License.
+ *
+ *  Change History:
+ *
+ *    Date        Who            What
+ *    ----        ---            ----
+ *    2023-01-20  Eric Albright  started this automation
+ *    2023-06-23  Eric Albright  major rewrite  Version #2.4.0 operational app
+ *
+ *   History of changes have moved to visible in app instructions - hideable 
+ * 
+ */
+
+import groovy.transform.Field
+#include ERA6515.dewpoint
+
+@Field static final String appVersionFLD  = '2.4.5'
+@Field static final String appModifiedFLD = '2023-09-09'
+@Field static final String appDescriptionFLD = 'Exhaust Automation'
+static String appVersion()  { return appVersionFLD }
+static String appVersionDt()  { return appModifiedFLD }
+static String appName() {return appDescriptionFLD }
+i
+def setVersion(){
+    state.name = "Exhaust Automation"
+	state.version = "2.4.5 : 2023-09-09"
+    state.namespace = "ERA6515"
+}
+
+definition(
+    name: "Exhaust Automation",
+    namespace: "ERA6515",
+	author: "Eric Albright",
+	description: "Determine Exhaust Fan Operation",
+	category: "Convenience",
+	iconUrl: "",
+	iconX2Url: ""
+)
+
+preferences {
+	page(name: "mainPage")
+    page(name: "settingsPage")
+    page(name: "changeLogPage")
+    page(name: "sensorPage")
+}
+
+def changeLogPage() {
+    return dynamicPage(name: "changeLogPage", uninstall: false, install: false) {
+        section(sectHead("History:")) {
+            txt = " History:\n"
+            txt += "   Resolved - Currently using a Temperature Humidity sensor that is having reliability issues...\n"
+            txt += "   * update 1.4.3 fix 2023.06.01 - sensors seem to be reliable at this point.  It was a distance from hub issue.\n"
+            txt += "   * update 2.4.0 re-write too many issues controlling fans\n"
+            txt += "   * 2.4.0  operational 2023.06.23 ready to deploy\n"
+            txt += "   *   It is assumed that the fan T&H sensor is in the house average (removed from average when it calls for operation of fan)\n"
+            txt += "   *   T&H sensors in selection is looking only at temperatureMeasurement,  need to include relativeHumidityMesurement to avoid DP calculation issues\n"
+            txt += "         issue is resolved with arrtibute check for humidity - and input has been changed from temperatureMeasurement to relativeHumidityMeasurement\n"
+            txt += "   * 2.4.2  more features\n"
+            txt += "   *   now if thermostat HEAT mode heat is not exhausted - if selected\n"
+            txt += "   * 2.4.3  23-07-03  more features\n"
+            txt += "   *   added pretty display for display tiles\n"
+            txt += "   *   added offset temperuature and dewpoint fan operation to decimal versus integer offsets\n"
+            txt += "   * 2.4.4  23-08-27  more features\n"
+            txt += "   *   added high acceptable dewpoint level from global variable\n"
+            txt += "   *   if triggering dewpoint is still below this upper level the fan will not operate.\n"
+            txt += "   *   this adds another method of adding humidity to the air when it is low in the house.\n"
+            txt += "   * 2.4.5  23-09-09  more features\n"
+            txt += "   *   added manual fan operation\n"
+            txt += "   *   if turned on manually it will call for a turn off based on Max manual run time in the setup\n"
+            txt += "   *   Dont have auto checks running yet so if auto call the fan it will still operation auto\n"
+            txt += "\n"            
+            paragraph "${txt}"
+        }
+    }
+}
+
+def mainPage() {
+	dynamicPage(name: "mainPage", title: "Exhaust Fan Control", uninstall: true, install: true) {
+		display() 
+        section("${getImage('instructions')} <b>Instructions & History:</b>", hideable: true, hidden: true) {
+			paragraph "<b>Notes:</b>"
+            paragraph ""
+            txt = " This turns exhaust fans on based on either temperature or humidity.\n"
+            txt += "    In winter humiditiy and heat are needed in the house so I might in the future add Summer/Winter control settings\n"
+            txt += "            heat mode has been implemented as of version 2.4.2\n"
+            txt +=  "\n"
+            txt += "    Humidity Control:\n"
+            txt += "        At least one sensor with Temperature and Relative Humidity will be used to determine 'House' dewpoint\n"
+            txt += "        At least one (currently only one) sensor will be used for 'Control' dewpoint\n"
+            txt += "        Since there is always going to be a difference in the sensors we will be looking for it to be above a level\n"
+            txt += "        varable set in app\n"
+            txt += "    Temperture Control:\n"
+            txt += "        Simular to Humidity just use temperature instead of dewpoint\n"
+            txt += "        Unlike Humidity control if thermostat is in heating mode heat will not be exhausted - if this feature is selected)\n"
+            txt += "          If selected a thermostat needs to be selected as well to determine if in heat mode.  Heat Mode ONLY - Auto will still exhaust\n"
+            txt += "    Fan Control:\n"
+            txt += "        Currently this is going to a virtual fan controller with on/off/low/medlo/med/medhi/high speeds\n"
+            txt += "        I have it runing in off or medium-high .... changes to come depending on what I end up with actually running\n"
+            txt += "        control sensor is required to have humidity monitoring - temperature alone will not work (at this time)\n"
+            txt += "        sensor selection is on relativeHumidityMeasurement\n"
+            txt += "    Areas:\n"
+            txt += "        I have it hard coded at Laundry room, Guest Bathroom and Master Bathroom.\n"
+            txt += "    Varables:\n"
+            txt += "        This uses three global varable of bigdecimal type to notify other apps of the house average dew point, house average temperature, and house average relative humidity\n"
+            txt += "        Using global varables so the information calculated is easily available to other apps. \n"
+            txt += "        I also have a humidifier and dehumidifier running - using global varable for High Dew Point set point so it is consitant. \n"
+            txt += "\n"
+            paragraph "${txt}"
+            txt = " Still to add to this app:\n"
+            txt += "    need to determine if there is a different operation based on heating/cooling.  Currently know it is good cooling\n"
+            txt += "        dewpoint still don't know\n"
+            txt += "        temperature - will not exhaust during heating season (e.g. if thermostat is in heating mode (not auto)) .. not implemented yet\n"
+            txt += "    need to add manaual operation fan controls\n"
+            txt += "        if manual on don't turn off based on auto controls - need to determine if auto request at end of manual and set if manual off will require reset of current auto before auto operation.\n"
+            txt += "    need to determine if there is a want to check outside air for energy to fix exhaust or bring in outside\n"
+            txt += "    fan is turning on when I have the temperature drop on the thermostat at night.  Don't understand issue yet.  Is it house average is changing and sensor average is not corrected? \n"
+            paragraph "${txt}"
+            paragraph getFormat("line","")
+            paragraph getFormat("footer-green", "No Rights Reserved - Made to operation on Hubitat")  
+            paragraph getFormat ("title", "${getImage("logo")}" +" Kokopelli Home Automation")
+        }
+            section("${getImage('instructions')} <b>Internally located sensor:</b>", hideable: true, hidden: true) {
+                paragraph getFormat("line","")
+                txt = "Master Bathroom:\n"
+                txt += "    located above the mirror light.\n"
+                txt += "Guest Bathroom:\n"
+                txt += "    on exhaust grill.\n"
+                txt += "Laundry Room:\n"
+                txt += "    on door frame behind the door - coming into the hallway.\n"
+                txt += "Kitchen:\n"
+                txt += "    located on the door frame on the pantry.\n"
+                txt += "Office:\n"
+                txt += "    located on the back of the crown on the gandfather clock.\n"
+                txt += "Back Guestroom:\n"
+                txt += "    Sitting on the head board - someday I will put it on the back of the ceiling fan blade.\n"
+                txt += "Master Bedroom:\n"
+                txt += "    On top of ceiling light, less than ideal since it will pickup motor heat where it is located.\n"
+                txt += "Livingroom:\n"
+                txt += "    On the lower coller on top of fan motor, again less than ideal since it is round and the tape might let go.  also can be seen.\n"
+                paragraph "${txt}"
+            }		
+
+
+        section(getFormat("header-green", "${getImage("Blank")}"+" House Average Values")) {
+            input name: "House", type: "capability.relativeHumidityMeasurement", title: "Select Temperature & Humidity sensor(s) to use in average", submitOnChange: true, multiple: true, required: false, width: 5
+/* removing            input "HouseAdp", "enum", title: "Select Variable to hold house dew point average", submitOnChange: true, width: 5, style: 'margin-left:10px', options: getAllGlobalVars().findAll{it.value.type == "bigdecimal"}.keySet().collect().sort{it.capitalize()}
+            input "HouseAT", "enum", title: "Select Variable to hold house temperature average", submitOnChange: true, width: 5, style: 'margin-left:10px', options: getAllGlobalVars().findAll{it.value.type == "bigdecimal"}.keySet().collect().sort{it.capitalize()}
+            input "HouseAH", "enum", title: "Select Variable to hold house relative humidity average", submitOnChange: true, width: 5, style: 'margin-left:10px', options: getAllGlobalVars().findAll{it.value.type == "bigdecimal"}.keySet().collect().sort{it.capitalize()}
+            input "HiDewpoint", "enum", title: "Select Variable that has the target level for house dew point", submitOnChange: true, width: 5, style: 'margin-left:10px', options: getAllGlobalVars().findAll{it.value.type == "bigdecimal"}.keySet().collect().sort{it.capitalize()}
+removing */
+        }
+        section(getFormat("header-green", "${getImage("Blank")}"+" Winter Heat Exhaust")) {
+            input name: "winterHeatKeep", type: "bool", title: "Enable winter heat NOT exhausted (based on thermostat in Heat mode)?", submitOnChange: true, defaultValue: false, width:6 
+            if (winterHeatKeep) input name: "winterMode", type: "capability.thermostat", title: "Select thermostat to determine winter", submitOnChange: true, multiple: false, required: false, width: 4
+        }      
+        section(getFormat("header-green", "${getImage("Blank")}"+" Laundry Room Details")) {
+            input name: "LaundryFan", type: "capability.fanControl", title: "Select FAN to operate", submitOnChange: true, multiple: false, required: false, width: 5
+            input name: "LaundrySensor", type: "capability.relativeHumidityMeasurement", title: "Select Temperature and Humdity sensor to control $LaundryFan", submitOnChange: true, multiple: false, required: false, width: 5
+            input name: "LaundryDewptHi", type: "decimal", title: "When dew point is more than this amount higher than the house average the fan will operate.", submitOnChange: true, defaultValue: 2.0, width: 5
+            input name: "LaundryTemperHi", type: "decimal", title: "When temperature is more than this amount higher than the house average the fan will operate.", submitOnChange: true, defaultValue: 3.0, width: 5
+            input name: "LaundryManualMax", type: "enum", title: "How long do you want to run when put into manual run?", options: ["5_Min","10_Min","15_Min","30_Min","1_Hour","not controlled"], submitOnChange: true, defaultValue: "10_Min", width: 5
+        }        
+        section(getFormat("header-green", "${getImage("Blank")}"+" Guest Bathroom Details")) {
+            input name: "Bath1Fan", type: "capability.fanControl", title: "Select FAN to operate", submitOnChange: true, multiple: false, required: false, width: 5
+            input name: "Bath1Sensor", type: "capability.relativeHumidityMeasurement", title: "Select Temperature and Humdity sensor to control $Bath1Fan", submitOnChange: true, multiple: false, required: false, width: 5
+            input name: "Bath1DewptHi", type: "decimal", title: "When dew point is more than this amount higher than the house average the fan will operate.", submitOnChange: true, defaultValue: 2.0, width: 5
+            input name: "Bath1TemperHi", type: "decimal", title: "When temperature is more than this amount higher than the house average the fan will operate.", submitOnChange: true, defaultValue: 3.0, width: 5
+            input name: "Bath1ManualMax", type: "enum", title: "How long do you want to run when put into manual run?", options: ["5_Min","10_Min","15_Min","30_Min","1_Hour","not controlled"], submitOnChange: true, defaultValue: "10_Min", width: 5
+        }                
+        section(getFormat("header-green", "${getImage("Blank")}"+" Master Bathroom Details")) { 
+            input name: "Bath2Fan", type: "capability.fanControl", title: "Select FAN to operate", submitOnChange: true, multiple: false, required: false, width: 5
+            input name: "Bath2Sensor", type: "capability.relativeHumidityMeasurement", title: "Select Temperature and Humdity sensor to control $Bath2Fan", submitOnChange: true, multiple: false, required: false, width: 5
+            input name: "Bath2DewptHi", type: "decimal", title: "When dew point is more than this amount higher than the house average the fan will operate.", submitOnChange: true, defaultValue: 2.0, width: 5
+            input name: "Bath2TemperHi", type: "decimal", title: "When temperature is more than this amount higher than the house average the fan will operate.", submitOnChange: true, defaultValue: 3.0, width: 5
+            input name: "Bath2ManualMax", type: "enum", title: "How long do you want to run when put into manual run?", options: ["5_Min","10_Min","15_Min","30_Min","1_Hour","not controlled"], submitOnChange: true, defaultValue: "10_Min", width: 5
+        }
+///// below is needed for new operating 
+        ///// this secition is needed in old as well as new
+        section(getFormat("header-green", "${getImage("Blank")}"+" Control Values")) { 
+
+            input "HouseAdp", "enum", title: "Select Variable to hold house dewpoint average", submitOnChange: true, width: 5, style: 'margin-left:10px', options: getAllGlobalVars().findAll{it.value.type == "bigdecimal"}.keySet().collect().sort{it.capitalize()}
+            input "HouseAT", "enum", title: "Select Variable to hold house temperature average", submitOnChange: true, width: 5, style: 'margin-left:10px', options: getAllGlobalVars().findAll{it.value.type == "bigdecimal"}.keySet().collect().sort{it.capitalize()}
+            input "HouseAH", "enum", title: "Select Variable to hold house relative humidity average", submitOnChange: true, width: 5, style: 'margin-left:10px', options: getAllGlobalVars().findAll{it.value.type == "bigdecimal"}.keySet().collect().sort{it.capitalize()}
+            input "HiDewpoint", "enum", title: "Select Variable that has the target level for house dew point", submitOnChange: true, width: 5, style: 'margin-left:10px', options: getAllGlobalVars().findAll{it.value.type == "bigdecimal"}.keySet().collect().sort{it.capitalize()}
+
+        }
+
+/////// below is not used - moving to in the future
+//   development -> to reset every time until development is complete next 4 lines
+        if(state.fans == null) state.fans = [:]
+        if(state.fanList == null) state.fanList = []
+        if(state.ctrlList == null) state.ctrlList = []
+//        state.fans = [:]
+  //      state.fanList = []
+    //    state.ctrlList = []
+		section(getFormat("header-green", "${getImage("Blank")}"+" Fan Information"), hideable: true, hidden: true) {
+            paragraph "Select the fans that will be controlled by Temperature and/or Dewpoint:\n"
+			input "fans", "capability.fanControl", title: "Select fan to operate", multiple: true, submitOnChange: true, width: 8
+			fans.each {dev ->
+				if(!state.fans["$dev.id"]) {
+                    
+                    paragraph getFormat("line")
+                    paragraph getFormat("title","${getImage("Blank")}"+" ${dev.label}")
+//                    def MM = "ManualMax"+"${dev.id}"
+//                    def ct = "ctrlr"+"${dev.id}"
+//                    def DR = "DewptRun"+"${dev.id}"
+//                    def TR = "TemperRun"+"${dev.id}"
+                    paragraph "For <b> $dev.label </b> which Temperature/Humiditiy sensor is to control its' operation?\n"
+                    input name: "ct", type: "capability.relativeHumidityMeasurement", title: "Select Temperature and Humdity sensor to control $dev.label", submitOnChange: true, multiple: false, required: true, width: 8
+                    input name: "DR", type: "decimal", title: "When dew point is more than this amount higher than the house average the fan will operate.", submitOnChange: true, defaultValue: 2.0, width: 5
+                    input name: "TR", type: "decimal", title: "When temperature is more than this amount higher than the house average the fan will operate.", submitOnChange: true, defaultValue: 3.0, width: 5
+                    paragraph "When the fan is operated in manual - how long until it returns to automatic control?\n"
+                    input name: "MM", type: "enum", title: "How long do you want to run when put into manual run?", options: ["5_Min","10_Min","15_Min","30_Min","1_Hour","not controlled"], submitOnChange: true, defaultValue: "10_Min", width: 5
+                    if (ct != null) {    
+                            state.fans["$dev.id"] = [start: dev.currentSwitch == "on" ? now() : 0, manualOp: false, autoDp: DR, autoT: TR, manualOff: MM, controlId: "${ct}", areaName: "$dev.label", opTime: 0.0]
+                            state.fanList += "$dev.id"
+                            state.ctrlList += "$ct.id"
+                        }
+                    log.Debug ("$dev")
+				}
+			}
+
+			if(fans) {
+				if(fans.id.sort() != state.fanList.sort()) { //something was removed
+					state.fanList = fans.id
+					Map newState = [:]
+					fans.each{d ->  newState["$d.id"] = state.fans["$d.id"]}
+					state.fans = newState
+				}
+			}
+		}
+
+        
+        /////////////
+/*        
+//   development -> to reset every time until development is complete next 4 lines
+        if(state.TH == null) state.TH = [:]
+//        state.TH = [:]
+		section(getFormat("header-green", "${getImage("Blank")}"+" Dewpoint Baseline Sensor Information"), hideable: true, hidden: true) {
+            paragraph "Select the temperature and humidity sensors that will be used for baseline dewpoint calculations:\n"
+			input name: "ths", type: "capability.relativeHumidityMeasurement", title: "Select dewpoint sensors", multiple: true, submitOnChange: true, required: false, width: 8
+        
+			ths.each {dev ->
+				if(!state.TH["$dev.id"]) {                    
+                    paragraph getFormat("line")
+                    paragraph getFormat("title","${getImage("Blank")}"+" ${dev.label}")
+//                    def lo = "loc"+"${dev.id}"
+//                    def bt = "battery"+"${dev.id}"
+//                    def ia = "inAvg"+"${dev.id}"
+                    input name: "lo", type: "text", title: "Where is $dev.label located?", submitOnChange: true, multiple: false, required: false, defaultValue: "n/a", width: 8
+                    input name: "bt", type: "enum", title: "Select the battery type this sensor uses", options: ["AA","AAA","CR123A","CR1632","CR2032","CR2477","D","LR44","DNK"],submitOnChange: true, defaultValue: "DNK", width: 5
+//                    input name: "${ia}", type: "bool", title: "To be used in house dewpoint average?", submitOnChange: true, defaultValue: true, width 5
+                    if(ctrlList) {
+                        if(ctrlList.id.sort() == dev.id) { //sensor is used for control
+                            ia = false                      
+                        } else {
+                            ia = true
+                        }
+                    }
+			        state.TH["$dev.id"] = [location: lo, battery: bt, avg: ia]
+				}
+            }   
+        }
+*/
+
+        section(sectHead("Dewpoint baseline sensor information:")) {
+//            href url: documentationUrl(), style: sEXTNRL, required: false, title: inTS1("View Documentation", "documentation"), description: inputFooter(sTTP, sCLRGRY, true)
+            href "sensorPage", title: inTS1("Select your temperature and humidity sensors to calculate dewpoint for the house.", sSETTINGS), description: inputFooter(sUFHA, sCLRGRY, true)
+//            href "changeLogPage", title: inTS1("View Change Logs", "change_log"), description: inputFooter(sTTVD, sCLRGRY, true)
+        }      
+        
+     
+  
+        
+        /////////////
+/////// above is WIP and is not used at this point
+/*  replace with prefsPage    
+        section(getFormat("header-green", "${getImage("Blank")}"+" Preferances")) {
+            input name: "logEnable", type: "bool", title: "Enable debug logging?", submitOnChange: true, defaultValue: true, width:5 
+            input name: "logTime", type: "enum", title: "How long do you want to log non-error events?", options: ["5_Min","10_Min","15_Min","30_Min","1_Hour","1_Day","7_Day","14_Day","21_Day","28_Day"], submitOnChange: true, defaultValue: "10_Min", width: 5
+        }
+*/
+        
+        section(sectHead("Documentation & Settings:")) {
+//            href url: documentationUrl(), style: sEXTNRL, required: false, title: inTS1("View Documentation", "documentation"), description: inputFooter(sTTP, sCLRGRY, true)
+            href "settingsPage", title: inTS1("Manage Logging, and Metrics", sSETTINGS), description: inputFooter(sTTM, sCLRGRY, true)
+            href "changeLogPage", title: inTS1("View Change Logs", "change_log"), description: inputFooter(sTTVD, sCLRGRY, true)
+        }
+
+        display2()
+    }
+}
+
+def sensorPage() {
+    return dynamicPage(name: "sensorPage", uninstall: false, install: false) {
+        section(sectHead("Temperature Humidity Sensor(s):")) {
+        
+//   development -> to reset every time until development is complete next 4 lines
+            if(state.TH == null) state.TH = [:]
+//            state.TH = [:]
+//		    section(getFormat("header-green", "${getImage("Blank")}"+" Dewpoint Baseline Sensor Information"), hideable: true, hidden: true) {
+//                paragraph "Select the temperature and humidity sensors that will be used for baseline dewpoint calculations:\n"
+			    input name: "ths", type: "capability.relativeHumidityMeasurement", title: "Select dewpoint sensors", multiple: true, submitOnChange: true, required: false, width: 8
+        
+			    ths.each {dev ->
+				    if(!state.TH["$dev.id"]) {                    
+                        paragraph getFormat("line")
+                        paragraph getFormat("title","${getImage("Blank")}"+" ${dev.label}")
+//                        def lo = "loc"+"${dev.id}"
+//                        def bt = "battery"+"${dev.id}"
+//                        def ia = "inAvg"+"${dev.id}"
+                        input name: "lo", type: "text", title: "Where is $dev.label located?", submitOnChange: true, multiple: false, required: false, defaultValue: "n/a", width: 8
+                        input name: "bt", type: "enum", title: "Select the battery type this sensor uses", options: ["AA","AAA","CR123A","CR1632","CR2032","CR2477","D","LR44","DNK"],submitOnChange: true, defaultValue: "DNK", width: 5
+//                        input name: "${ia}", type: "bool", title: "To be used in house dewpoint average?", submitOnChange: true, defaultValue: true, width 5
+                        if(ctrlList) {
+                            if(ctrlList.id.sort() == dev.id) { //sensor is used for control
+                                ia = false                      
+                            } else {
+                                ia = true
+                            }
+                        }
+			            state.TH["$dev.id"] = [location: lo, battery: bt, avg: ia]
+				    }
+                }   
+//            }
+        }
+    }
+}
+
+
+def updated() {
+    logInfo("Updated Event Received...")
+    getHeaderAndFooter()
+    unsubscribe()
+    setVersion()
+    logInfo ("house average ...")
+    getHouseAverage()
+//    cleanup()
+    initialize()
+}
+
+def cleanup() {
+    logInfo("Cleanup Event Received...")
+//    state.remove ('ctrlList[]')
+//    state.remove ('physical')
+    app.removeSetting ('MM')
+    app.removeSetting ('ct')
+    app.removeSetting ('TR')
+    app.removeSetting ('TemperRun1602')
+    app.removeSetting ('TemperRun')
+    app.removeSetting ('ManualMax1602')
+    app.removeSetting ('DR')
+    app.removeSetting ('ctrlr1602')
+    app.removeSetting ('DewptRun1602')
+//    app.removeSetting ('TemperRun1664')
+}
+
+def installed() {
+    logInfo("Installed Event Received...")
+   	initialize()
+}
+ 
+def initialize() {
+    logInfo("Initialize Event Received...")
+    setDefaults()
+    House.each { d->
+        if ((d.label == LaundrySensor.label) || (d.label == Bath1Sensor.label) || (d.label == Bath2Sensor.label)){
+            subscribe(d, "temperature", getSensorOp)
+        } else {
+            subscribe(d, "temperature", getHouseData)
+        }
+    }
+    subscribe(fans, "switch", getFanOp)
+//    subscribe(fans,"switch.off",getFanOp)
+    
+    subscribe(LaundryFan, "switch", getFanOp)
+    subscribe(Bath1Fan, "switch", getFanOp)
+    subscribe(Bath2Fan, "switch", getFanOp) 
+}
+
+void getHouseData(evt){
+    logInfo("getHouseData ($evt.device.label)...")
+    def ctrl = "${evt.device.label}"
+    def ctrlFan = null
+    getHouseAverage()
+}
+
+void getSensorOp(evt){  
+    logInfo("getSensorOp ($evt.device.label)...")
+    def ctrlSensor = "${evt.device.label}"
+    def ctrlFan = null
+    def totalT = 0
+    def totalH = 0
+    def curDP = 0
+    getHouseAverage()
+    def houseAvgT = getGlobalVar("$HouseAT").value
+    def houseAvgDP = getGlobalVar("$HouseAdp").value
+    def houseHiDew = getGlobalVar("$HiDewpoint").value
+    def DewptHi = houseAvgDP
+    def TemperHi = houseAvgT
+    def curSpeed = null 
+    if (ctrlSensor == LaundrySensor.label) { 
+        ctrlFan = LaundryFan.label
+        curSpeed = LaundryFan.currentspeed  
+        DewptHi = LaundryDewptHi
+        TemperHi = LaundryTemperHi
+    }
+    if (ctrlSensor == Bath1Sensor.label) { 
+        ctrlFan = Bath1Fan.label 
+        curSpeed = Bath1Fan.currentspeed
+        DewptHi = Bath1DewptHi
+        TemperHi = Bath1TemperHi
+    }
+    if (ctrlSensor == Bath2Sensor.label) { 
+        ctrlFan = Bath2Fan.label 
+        curSpeed = Bath2Fan.currentspeed
+        DewptHi= Bath2DewptHi
+        TemperHi = Bath2TemperHi
+    }
+    def DPattribu
+    float ctrlTemp = evt.device.currentTemperature
+    float ctrlHum = evt.device.currentHumidity
+    float ctrlDP = dewpt(ctrlTemp,ctrlHum)
+    def n = 0
+    def DPrun = false
+    def Trun = false
+    House.each{ dev ->
+        chkForFan = dev.label
+        if (chkForFan == LaundrySensor.label) {
+           hasFan = LaundryFan.label
+           hasSpeed = LaundryFan.currentspeed
+           }
+        
+        if (chkForFan == Bath1Sensor.label) {
+           hasFan = Bath1Fan.label
+           hasSpeed = Bath1Fan.currentspeed
+           } 
+                  
+        if (chkForFan == Bath2Sensor.label) {
+           hasFan = Bath2Fan.label
+           hasSpeed = Bath2Fan.currentspeed
+           }
+        
+    }
+    setGlobalVar("Dewpoint", houseAvgDP)
+    chkDP = ctrlDP - houseAvgDP
+    chkT = ctrlTemp - houseAvgT
+    if ((chkDP >= DewptHi) && (houseHiDew < ctrlDP)) DPrun = true
+    if (chkT >= TemperHi) Trun = true
+    if ((Trun) && (winterHeatKeep) && (winterMode.thermostatMode == "heat")) Trun = false
+    logInfo("$state.name: $ctrlFan operations - run due to $chkDP DP $DPrun || run due to $chkT Temperature $Trun | current fan op is $curSpeed, high = $houseHiDew")
+    House.each{ dev ->
+        if (dev.label == ctrlSensor) {
+            dev.disPlay (ctrlTemp,ctrlHum,ctrlDP,Trun,DPrun,ctrlSensor)
+        }
+    }
+    if ((curSpeed == 'off') && ((DPrun) || (Trun)))  {
+        if ((ctrlSensor == LaundrySensor.label) && (!app.Laundrymanual)) LaundryFan.setSpeed('high')
+        if ((ctrlSensor == Bath1Sensor.label) && (!app.Bath1manual)) Bath1Fan.setSpeed('high')
+        if ((ctrlSensor == Bath2Sensor.label) && (!app.Bath2manual)) Bath2Fan.setSpeed('medium-high')
+        }
+      
+    if ((curSpeed != 'off') && !DPrun && !Trun) {
+        if ((ctrlSensor == LaundrySensor.label) && (!app.Laundrymanual))  LaundryFan.setSpeed('off') 
+        if ((ctrlSensor == Bath1Sensor.label) && (!app.Bath1manual))  Bath1Fan.setSpeed('off')
+        if ((ctrlSensor == Bath2Sensor.label) && (!app.Bath2manual))  Bath2Fan.setSpeed('off')
+    }
+}
+
+void getFanOp(evt){  
+    logInfo("getFanOp ($evt.label)...")
+    def ManualOp = evt.isPhysical()
+    def status = "${evt.value}"  
+    def ctrlFan = "${evt.device.label}"
+    if (ManualOp) {
+    logInfo("fan manual Operation ...")
+        if (ctrlFan == LaundryFan.label) {
+            if (status == "on") {
+                if (LaundryManualMax == "5_Min") runIn((60*5.toInteger()),manualLaundryReset) 
+                if (LaundryManualMax == "10_Min") runIn((60*10.toInteger()),manualLaundryReset) 
+                if (LaundryManualMax == "15_Min") runIn((60*15.toInteger()),manualLaundryReset) 
+                if (LaundryManualMax == "30_Min") runIn((60*30.toInteger()),manualLaundryReset) 
+                if (LaundryManualMax == "1_Hour") runIn((60*60.toInteger()),manualLaundryReset) 
+            app?.updateSetting("Laundrymanual",[value:"true",type:"bool"])
+            }
+            if (status == "off") {
+                runIn((60*60.toInteger()),manualLaundryReset) 
+                app?.updateSetting("Laundrymanual",[value:"true",type:"bool"])
+            }
+        }
+        if (ctrlFan == Bath1Fan.label){
+            if (status == "on") {
+                if (Bath1ManualMax == "5_Min") runIn((60*5.toInteger()),manualBath1Reset) 
+                if (Bath1ManualMax == "10_Min") runIn((60*10.toInteger()),manualBath1Reset) 
+                if (Bath1ManualMax == "15_Min") runIn((60*15.toInteger()),manualBath1Reset) 
+                if (Bath1ManualMax == "30_Min") runIn((60*30.toInteger()),manualBath1Reset) 
+                if (Bath1ManualMax == "1_Hour") runIn((60*60.toInteger()),manualBath1Reset) 
+            app?.updateSetting("Bath1manual",[value:"true",type:"bool"])
+            }
+            if (status == "off") {
+               runIn((60*60.toInteger()),manualBath1Reset) 
+                app?.updateSetting("Bath1manual",[value:"true",type:"bool"])
+            }
+        }
+        if (ctrlFan == Bath2Fan.label){
+            if (status == "on") {
+                if (Bath2ManualMax == "5_Min") runIn((60*5.toInteger()),manualBath2Reset) 
+                if (Bath2ManualMax == "10_Min") runIn((60*10.toInteger()),manualBath2Reset) 
+                if (Bath2ManualMax == "15_Min") runIn((60*15.toInteger()),manualBath2Reset) 
+                if (Bath2ManualMax == "30_Min") runIn((60*30.toInteger()),manualBath2Reset) 
+                if (Bath2ManualMax == "1_Hour") runIn((60*60.toInteger()),manualBath2Reset) 
+            app?.updateSetting("Bath2manual",[value:"true",type:"bool"])
+            }
+            if (status == "off") {
+                runIn((60*60.toInteger()),manualBath2Reset) 
+                app?.updateSetting("Bath2manual",[value:"true",type:"bool"])
+            }
+        }
+    } 
+}
+
+def manualLaundryReset() {
+    logInfo("manual Laundry reset...")
+    app?.updateSetting("Laundrymanual",[value:"false",type:"bool"])   
+    LaundryFan.setSpeed('off')
+}
+def manualBath1Reset() {
+    logInfo("manual Bath1 reset...")
+    app?.updateSetting("Bath1manual",[value:"false",type:"bool"])   
+    ctrlFan = Bath1Fan.label
+    Bath1Fan.setSpeed('off')
+}
+def manualBath2Reset() {
+    logInfo("manual Bath2 reset...")
+    app?.updateSetting("Bath2manual",[value:"false",type:"bool"])  
+    Bath2Fan.setSpeed('off')
+}
+
+void adjFan(itm){  
+    logInfo("adjFan($itm.label)...")
+    name = "${itm.device.label}" + "-physical"
+    if (name == true) {
+            LaundryFan.setSpeed('off')
+            app?.updateSetting("${LaundrySensor.label}",[value:false,type:"bool"])
+        }
+    name = state.Master Bathroom Fan-physical
+    if (name == true) {
+            Bath2Sensor.setSpeed('off')
+            app?.updateSetting("${Bath2Sensor.label}",[value:false,type:"bool"])
+        }  
+}
+
+void getHouseAverage() {
+    logTrace  ("$state.name: In getHouseAverage() ... ")
+    totalT = 0
+    totalH = 0
+    DPattribu = false
+    n = 0 
+
+//    House.each{ dev ->
+    state.TH.each{k, dev ->
+
+        skipForAvg = true
+        DPrun = false
+        Trun = false
+  
+        logDebug ("k == $k state.TH[$k]")
+        def lok = ths.find{"$it.id" == k}
+        if (lok.hasAttribute("humidity")){
+            logDebug ("$lok.id --- $lok.currentTemperature and $lok.label is $lok.currentHumidity")
+
+//            state.fans.each{l, fns ->
+//                def tst = fns.controlId
+//                def tst2 = ctrlr1602
+//                def tst.id
+//                logDebug ("l = $l: fns = $fns : tst = $tst || tst2 = $tst || tst3 = ???? ")
+//                if (tst.label == lok.label) {
+//                    skipForAvg = true
+//                } else {
+//                    skipForAvg = false
+//                }
+//            }
+
+            
+//            def dok = state.fans.find{"$it.controlId" == $lok.label}
+//            logDebug ("skip --- $skipForAvg")
+//            if (dok.currentSwitch == "off") {
+                curT = lok.currentTemperature
+                curH = lok.currentHumidity
+                totalT += curT
+                totalH += curH
+                curDewpt = dewpt(curT,curH)
+                n += 1
+                DPattribu = lok.hasAttribute("actDewpt")
+                if (DPattribu) chkDP = lok.currentValue('actDewpt')   
+                curDewpt = dewpt(curT,curH)
+                if((chkDP != curDewpt) && (DPattribu)) lok.setDewpoint(curDewpt)
+                logDebug ("$curDewpt dewpoint")
+//            }
+        }
+        
+//         developing
+
+//        tmpId = $dev.id
+//        skp = state.fans["$fannum"]
+//        log.debug "skp = $skp"
+        
+              
+//  old method comment out during development
+ /*
+        curT = dev.currentTemperature
+        if (dev.hasAttribute("humidity")) {
+            skipForAvg = false
+            chkDewpt = 0
+            curH = dev.currentHumidity
+            DPattribu = dev.hasAttribute("actDewpt")
+            if (DPattribu) chkDP = dev.currentValue('actDewpt')   
+            curDewpt = dewpt(curT,curH)
+            if((chkDP != curDewpt) && (DPattribu)) dev.setDewpoint(curDewpt)
+        }
+
+        chkForFan = dev.label
+        if (chkForFan == LaundrySensor.label) {
+           hasFan = LaundryFan.label
+           hasSpeed = LaundryFan.currentspeed
+           if (hasSpeed != "off") {
+                skipForAvg = true
+           }
+        }
+        if (chkForFan == Bath1Sensor.label) {
+           hasFan = Bath1Fan.label
+           hasSpeed = Bath1Fan.currentspeed
+           if (hasSpeed != "off") {
+                skipForAvg = true
+           } 
+        }                    
+        if (chkForFan == Bath2Sensor.label) {
+           hasFan = Bath2Fan.label
+           hasSpeed = Bath2Fan.currentspeed
+           if (hasSpeed != "off") {
+                skipForAvg = true
+           }
+        }
+        if (!skipForAvg){
+            totalT += curT
+            totalH += curH
+            n += 1
+            if (DPattribu) dev.disPlay(curT,curH,curDewpt,Trun,DPrun,dev.label)
+        }
+//  old method comment out during development
+*/
+
+    }
+    if (n == 0) n = 1
+    totalT = totalT/n
+    totalH = totalH/n
+    curDP = dewpt(totalT,totalH)
+    setGlobalVar(HouseAdp, curDP)
+    setGlobalVar(HouseAT, totalT)
+    setGlobalVar(HouseAH, totalH)
+    logDebug (" TotalT and H $totalT F $totalH% with dew point $curDP F")
+
+    logTrace ("... $state.name: Leaving getHouseAverage()")
+}
+
+//************************************************
+//*               STATIC VARIABLES               *
+//************************************************
+@Field static final String sNULL          = (String)null
+@Field static final String sBLANK         = ''
+@Field static final String sSPACE         = ' '
+@Field static final String sBULLET        = '\u2022'
+//@Field static final String sBULLETINV     = '\u25E6'
+//@Field static final String sSQUARE        = '\u29C8'
+//@Field static final String sPLUS          = '\u002B'
+//@Field static final String sRIGHTARR      = '\u02C3'
+@Field static final String okSymFLD       = "\u2713"
+@Field static final String notOkSymFLD    = "\u2715"
+@Field static final String sPAUSESymFLD   = "\u275A\u275A"
+@Field static final String sLINEBR        = '<br>'
+@Field static final String sFALSE         = 'false'
+@Field static final String sTRUE          = 'true'
+@Field static final String sBOOL          = 'bool'
+@Field static final String sENUM          = 'enum'
+@Field static final String sNUMBER        = 'number'
+@Field static final String sTEXT          = 'text'
+@Field static final String sTIME          = 'time'
+@Field static final String sMODE          = 'mode'
+//@Field static final String sCOMPLT        = 'complete'
+@Field static final String sMEDIUM        = 'medium'
+@Field static final String sSMALL         = 'small'
+@Field static final String sCLR4D9        = '#2784D9'
+@Field static final String sCLRRED        = 'red'
+@Field static final String sCLRRED2       = '#cc2d3b'
+@Field static final String sCLRGRY        = 'gray'
+//@Field static final String sCLRGRN        = 'green'
+@Field static final String sCLRGRN2       = '#43d843'
+@Field static final String sCLRORG        = 'orange'
+@Field static final String sTTM           = 'Tap to modify...'
+@Field static final String sTTC           = 'Tap to configure...'
+@Field static final String sUFHA          = 'Varibles used for house averages to be passed to other programs'
+//@Field static final String sTTCR          = 'Tap to configure (Required)'
+//@Field static final String sTTP           = 'Tap to proceed...'
+//@Field static final String sTTS           = 'Tap to select...'
+@Field static final String sSETTINGS      = 'settings'
+@Field static final String sRESET         = 'reset'
+@Field static final String sEXTNRL        = 'external'
+@Field static final String sDEBUG         = 'debug'
+@Field static final String sSWITCH        = 'switch'
+@Field static final String sCHKBOX        = 'checkbox'
+@Field static final String sCOMMAND       = 'command'
+@Field static final String zoneHistFLD    = 'zoneHistory'
+@Field static final List<String> lSUNRISESET   = ["sunrise", "sunset"]
+
+//************************************************
+//*          IN-MEMORY ONLY VARIABLES            *
+//* (Cleared only on HUB REBOOT or CODE UPDATES) *
+//************************************************
+@Field volatile static Map<String,Map> historyMapFLD = [:]
+// @Field volatile static String gitBranchFLD = null
+
+
+
+  
+/* --------------------------------------------------------------------------------------------------------
+ * 
+ *  Everything below is constant for all Apps ....
+ *
+ *  date 23.01.20
+ *
+ * ------------------------------------------------------------------------------------------------------*/
+
+def setDefaults(){
+	if(logEnable == null){logEnable = false} 
+    if (logEnable) { 
+        if (logTime == "5_Min") runIn((60*5.toInteger()),logsOff) 
+        if (logTime == "10_Min") runIn((60*10.toInteger()),logsOff) 
+        if (logTime == "15_Min") runIn((60*15.toInteger()),logsOff) 
+        if (logTime == "30_Min") runIn((60*30.toInteger()),logsOff) 
+        if (logTime == "1_Hour") runIn((60*60.toInteger()),logsOff) 
+        if (logTime == "1_Day") runIn((60*24*60.toInteger()),logsOff)
+        if (logTime == "7_Day") runIn((60*24*60*7.toInteger()),logsOff)
+        if (logTime == "14_Day") runIn((60*24*60*14.toInteger()),logsOff)
+        if (logTime == "21_Day") runIn((60*24*60*21.toInteger()),logsOff)
+        if (logTime == "28_Day") runIn((60*24*60*28.toInteger()),logsOff)
+    }   
+}
+
+def settingsPage() {
+    return dynamicPage(name: "settingsPage", uninstall: false, install: false) {
+        section(sectHead("Logging:")) {
+            input "logInfo", sBOOL, title: inTS1("Show Info Logs?", sDEBUG), required: false, defaultValue: true, submitOnChange: true
+            input "logWarn", sBOOL, title: inTS1("Show Warning Logs?", sDEBUG), required: false, defaultValue: true, submitOnChange: true
+            input "logError", sBOOL, title: inTS1("Show Error Logs?", sDEBUG), required: false, defaultValue: true, submitOnChange: true
+            input "logDebug", sBOOL, title: inTS1("Show Debug Logs?", sDEBUG), description: "Auto disables after 6 hours", required: false, defaultValue: false, submitOnChange: true
+            input "logTrace", sBOOL, title: inTS1("Show Detailed Logs?", sDEBUG), description: "Only enabled when asked to.\n(Auto disables after 6 hours)", required: false, defaultValue: false, submitOnChange: true
+        }
+    }
+}
+
+static String getAppImg(String imgName) { return "http://192.168.1.147/local/${imgName}.jpg" }
+
+static String getPublicImg(String imgName) { return "http://192.168.1.147/local/${imgName}.jpg" }
+
+//static String sectTS(String t, String i = sNULL, Boolean bold=false) { return """<h3>${i ? """<img src="${i}" width="48"> """ : sBLANK} ${bold ? "<b>" : sBLANK}${t?.replaceAll("\\n", "<br>")}${bold ? "</b>" : sBLANK}</h3>""" }
+
+static String sectH3TS(String t, String st, String i = sNULL, String c=sCLR4D9) { return """<h3 style="color:${c};font-weight: bold">${i ? """<img src="${i}" width="48"> """ : sBLANK} ${t?.replaceAll("\\n", "<br>")}</h3>${st ?: sBLANK}""" }
+
+public static String paraTS(String title = sNULL, String body = sNULL, String img = sNULL, Map tOpts=[s: 'normal', c: 'black', b: true, u:true], Map bOpts = [s:'normal', c: sNULL, b: false]) {
+    String s = sBLANK
+    s += title ? "<div style='${tOpts && (String)tOpts.c != sNULL ? "color: ${(String)tOpts.c};" : sBLANK}${tOpts && (String)tOpts.s != sNULL ? "font-size: ${(String)tOpts.s};" : sBLANK}${tOpts && (Boolean)tOpts.b ? "font-weight: bold;" : sBLANK}${tOpts && (Boolean)tOpts.u ? "text-decoration: underline;" : sBLANK}'>${img != sNULL ? """<img src=${getAppImg(img)} width="42"> """ : sBLANK}${title}</div>" : sBLANK
+    s += body ? "<div style='${bOpts && (String)bOpts.c != sNULL ? "color: ${(String)bOpts.c};" : sBLANK}${bOpts && (String)bOpts.s != sNULL ? "font-size: ${(String)bOpts.s};" : sBLANK}${bOpts && (Boolean)bOpts.b ? "font-weight: bold;" : sBLANK}'>${body}</div>" : sBLANK
+    return s
+}
+
+static String sectHead(String str, String img = sNULL) { return str ? "<h3 style='margin-top:0;margin-bottom:0;'>" + spanImgStr(img) + span(str, "darkorange", sNULL, true) + "</h3>" + "<hr style='background-color:${sCLRGRY};font-style:italic;height:1px;border:0;margin-top:0;margin-bottom:0;'>" : sBLANK }
+static String sTS(String t, String i = sNULL, Boolean bold=false) { return "<h3>${i ? "<img src='${i}' width='42'> " : sBLANK} ${bold ? "<b>" : sBLANK}${t?.replaceAll("\n", "<br>")}${bold ? "</b>" : sBLANK}</h3>" }
+static String s3TS(String t, String st, String i = sNULL, String c=sCLR4D9) { return "<h3 style='color:${c};font-weight: bold;'>${i ? "<img src='${i}' width='42'> " : sBLANK} ${t?.replaceAll("\n", "<br>")}</h3>${st ? "${st}" : sBLANK}" }
+static String pTS(String t, String i = sNULL, Boolean bold=true, String color=sNULL) { return "${color ? "<div style='color: $color;'>" : sBLANK}${bold ? "<b>" : sBLANK}${i ? "<img src='${i}' width='42'> " : sBLANK}${t?.replaceAll("\n", "<br>")}${bold ? "</b>" : sBLANK}${color ? "</div>" : sBLANK}" }
+
+static String inTS1(String str, String img = sNULL, String clr=sNULL, Boolean und=true) { return spanSmBldUnd(str, clr, img) }
+static String inTS(String str, String img = sNULL, String clr=sNULL, Boolean und=true) { return divSm(strUnder(str?.replaceAll("\n", sSPACE)?.replaceAll("<br>", sSPACE), und), clr, img) }
+
+// Root HTML Objects
+static String span(String str, String clr=sNULL, String sz=sNULL, Boolean bld=false, Boolean br=false) { return str ? "<span ${(clr || sz || bld) ? "style='${clr ? "color: ${clr};" : sBLANK}${sz ? "font-size: ${sz};" : sBLANK}${bld ? "font-weight: bold;" : sBLANK}'" : sBLANK}>${str}</span>${br ? sLINEBR : sBLANK}" : sBLANK }
+static String div(String str, String clr=sNULL, String sz=sNULL, Boolean bld=false, Boolean br=false) { return str ? "<div ${(clr || sz || bld) ? "style='${clr ? "color: ${clr};" : sBLANK}${sz ? "font-size: ${sz};" : sBLANK}${bld ? "font-weight: bold;" : sBLANK}'" : sBLANK}>${str}</div>${br ? sLINEBR : sBLANK}" : sBLANK }
+static String spanImgStr(String img=sNULL) { return img ? span("<img src='${(!img.startsWith("http://") && !img.startsWith("https://")) ? getAppImg(img) : img}' width='42'> ") : sBLANK }
+static String divImgStr(String str, String img=sNULL) { return str ? div(img ? spanImg(img) + span(str) : str) : sBLANK }
+static String strUnder(String str, Boolean showUnd=true) { return str ? (showUnd ? "<u>${str}</u>" : str) : sBLANK }
+static String getOkOrNotSymHTML(Boolean ok) { return ok ? span("(${okSymFLD})", sCLRGRN2) : span("(${notOkSymFLD})", sCLRRED2) }
+static String htmlLine(String color=sCLR4D9) { return "<hr style='background-color:${color};height:1px;border:0;margin-top:0;margin-bottom:0;'>" }
+static String lineBr(Boolean show=true) { return show ? sLINEBR : sBLANK }
+static String inputFooter(String str, String clr=sCLR4D9, Boolean noBr=false) { return str ? lineBr(!noBr) + divSmBld(str, clr) : sBLANK }
+static String inactFoot(String str) { return str ? inputFooter(str, sCLRGRY, true) : sBLANK }
+static String actFoot(String str) { return str ? inputFooter(str, sCLR4D9, false) : sBLANK }
+static String optPrefix() { return spanSm(" (Optional)", "violet") }
+//
+
+// Custom versions of the root objects above
+static String spanBld(String str, String clr=sNULL, String img=sNULL)      { return str ? spanImgStr(img) + span(str, clr, sNULL, true)             : sBLANK }
+static String spanBldBr(String str, String clr=sNULL, String img=sNULL)    { return str ? spanImgStr(img) + span(str, clr, sNULL, true, true)       : sBLANK }
+static String spanBr(String str, String clr=sNULL, String img=sNULL)       { return str ? spanImgStr(img) + span(str, clr, sNULL, false, true)      : sBLANK }
+static String spanSm(String str, String clr=sNULL, String img=sNULL)       { return str ? spanImgStr(img) + span(str, clr, sSMALL)                 : sBLANK }
+static String spanSmBr(String str, String clr=sNULL, String img=sNULL)     { return str ? spanImgStr(img) + span(str, clr, sSMALL, false, true)    : sBLANK }
+static String spanSmBld(String str, String clr=sNULL, String img=sNULL)    { return str ? spanImgStr(img) + span(str, clr, sSMALL, true)           : sBLANK }
+static String spanSmBldUnd(String str, String clr=sNULL, String img=sNULL) { return str ? spanImgStr(img) + span(strUnder(str), clr, sSMALL, true) : sBLANK }
+static String spanSmBldBr(String str, String clr=sNULL, String img=sNULL)  { return str ? spanImgStr(img) + span(str, clr, sSMALL, true, true)     : sBLANK }
+static String spanMd(String str, String clr=sNULL, String img=sNULL)       { return str ? spanImgStr(img) + span(str, clr, sMEDIUM)                : sBLANK }
+static String spanMdBr(String str, String clr=sNULL, String img=sNULL)     { return str ? spanImgStr(img) + span(str, clr, sMEDIUM, false, true)   : sBLANK }
+static String spanMdBld(String str, String clr=sNULL, String img=sNULL)    { return str ? spanImgStr(img) + span(str, clr, sMEDIUM, true)          : sBLANK }
+static String spanMdBldBr(String str, String clr=sNULL, String img=sNULL)  { return str ? spanImgStr(img) + span(str, clr, sMEDIUM, true, true)    : sBLANK }
+
+
+static String divBld(String str, String clr=sNULL, String img=sNULL)        { return str ? div(spanImgStr(img) + span(str), clr, sNULL, true, false)   : sBLANK }
+static String divBldBr(String str, String clr=sNULL, String img=sNULL)      { return str ? div(spanImgStr(img) + span(str), clr, sNULL, true, true)    : sBLANK }
+static String divBr(String str, String clr=sNULL, String img=sNULL)         { return str ? div(spanImgStr(img) + span(str), clr, sNULL, false, true)   : sBLANK }
+static String divSm(String str, String clr=sNULL, String img=sNULL)         { return str ? div(spanImgStr(img) + span(str), clr, sSMALL)              : sBLANK }
+static String divSmBr(String str, String clr=sNULL, String img=sNULL)       { return str ? div(spanImgStr(img) + span(str), clr, sSMALL, false, true) : sBLANK }
+static String divSmBld(String str, String clr=sNULL, String img=sNULL)      { return str ? div(spanImgStr(img) + span(str), clr, sSMALL, true)        : sBLANK }
+static String divSmBldBr(String str, String clr=sNULL, String img=sNULL)    { return str ? div(spanImgStr(img) + span(str), clr, sSMALL, true, true)  : sBLANK }
+
+//static String actChildName(){ return "Echo Speaks - Actions" }
+//static String zoneChildName(){ return "Echo Speaks - Zones" }
+//static String zoneChildDeviceName(){ return "Echo Speaks - Zones" }
+static String documentationUrl() { return "httpERAs://tonesto7.github.io/echo-speaks-docs" }
+static String videoUrl() { return "https://www.youtube.com/watch?v=wQPPlTFaGb4&ab_channel=SimplySmart123%E2%9C%85" }
+static String textDonateUrl() { return "httpERAs://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=HWBN4LB9NMHZ4" }
+def updateDocsInput() { href url: documentationUrl(), style: sEXTNRL, required: false, title: inTS1("View Documentation", "documentation"), description: inactFoot(sTTP) }
+
+String getAppEndpointUrl(subPath)   { return "${getApiServerUrl()}/${getHubUID()}/apps/${app?.id}${subPath ? "/${subPath}" : sBLANK}?access_token=${state.accessToken}".toString() }
+
+String getLocalEndpointUrl(subPath) { return "${getLocalApiServerUrl()}/apps/${app?.id}${subPath ? "/${subPath}" : sBLANK}?access_token=${state.accessToken}" }
+
+def appFooter() {
+    section() {
+        paragraph htmlLine()
+		paragraph inputFooter("<div style='text-align:center;font-size:30px;font-weight:bold'>Kokopelli Home Automation</div>")
+		paragraph actFoot("<div style='text-align:center;font-size:20px;font-weight:bold'>${appModifiedFLD} - ${appVersionFLD}</div>")
+    }
+
+}
+
+def appInfoSect() {
+//    Map codeVer = (Map)state.codeVersions ?: null
+    String tStr = sBLANK
+    Boolean isNote = false
+    List<Map> verMap = []
+    verMap.push([name: "App:", ver: "v${appVersionFLD}"])
+//    if((String)codeVer.echoDevice) verMap.push([name: "Device:", ver: "v${(String)codeVer.echoDevice}"])
+     if(verMap?.size()) {
+        tStr += "<table style='border: 1px solid ${sCLRGRY};border-collapse: collapse;'>"
+        verMap.each { it->
+            tStr += "<tr style='border: 1px solid ${sCLRGRY};'><td style='border: 1px solid ${sCLRGRY};padding: 0px 3px 0px 3px;'>${spanSmBld((String)it.name)}</td><td style='border: 1px solid ${sCLRGRY};padding: 0px 3px 0px 3px;'>${spanSmBr("${(String)it.ver}")}</td></tr>"
+        }
+        tStr += "</table>"
+      }
+     tStr = spanSm(tStr, sCLRGRY)                      
+
+    section(sectH3TS((String)app?.name, tStr, getAppImg("logo"), sCLR4D9)) {
+        state.isInstalled = true // temp
+        if(!(Boolean)state.isInstalled) {
+            paragraph spanSmBld("--NEW Install--", sCLR4D9)
+        } else {
+            if(!isNote) { paragraph inputFooter("No Issues to Report", sCLRGRY, true) }
+        }
+        // paragraph htmlLine()
+    }
+}
+
+/******************************************
+|   App Input Description Functions
+*******************************************/
+static String logPrefix(String msg, String color = sNULL) {
+    return span(appDescriptionFLD + "(v" + appVersionFLD + ") | ", sCLRGRY) + span(msg, color)
+}
+
+List logLevels() {
+    List lItems = ["logInfo", "logWarn", "logDebug", "logError", "logTrace"]
+    return settings?.findAll { it.key in lItems && it?.value == true }?.collect { it.key }
+}
+
+private void logDebug(String msg) { if((Boolean)settings.logDebug) { log.debug logPrefix(msg, "purple") } }
+private void logInfo(String msg) { if((Boolean)settings.logInfo) { log.info sSPACE + logPrefix(msg, "#0299b1") } }
+private void logTrace(String msg) { if((Boolean)settings.logTrace) { log.trace logPrefix(msg, sCLRGRY) } }
+private void logWarn(String msg, Boolean noHist=false) { if((Boolean)settings.logWarn) { log.warn sSPACE + logPrefix(msg, sCLRORG) }; if(!noHist) { addToLogHistory("warnHistory", msg, 15) } }
+
+void logError(String msg, Boolean noHist=false, ex=null) {
+    if((Boolean)settings.logError) {
+        log.error logPrefix(msg, sCLRRED)
+        String a
+        try {
+            if (ex) a = getExceptionMessageWithLine(ex)
+        } catch (ignored) {
+        }
+        if(a) log.error logPrefix(a, sCLRRED)
+    }
+    if(!noHist) { addToLogHistory("errorHistory", msg, 15) }
+}
+
+
+def logsOff() {
+    log.warn "${app.label} debug logging disabled..."
+    app?.updateSetting("logEnable",[value:"false",type:"bool"])
+    app.removeSetting("logTime")
+    }
+
+def getImage(type) {					// Modified from @Stephack Code
+    def loc = "<img src=http://192.168.1.224/local/"
+    if(type == "Blank") return "${loc}blank.png height=40 width=5}>"
+    if(type == "checkMarkGreen") return "${loc}checkMarkGreen2.png height=30 width=30>"
+    if(type == "optionsGreen") return "${loc}options-green.png height=30 width=30>"
+    if(type == "optionsRed") return "${loc}options-red.png height=30 width=30>"
+    if(type == "instructions") return "${loc}instructions.png height=30 width=30>"
+    if(type == "logo") return "${loc}logo.jpg height=60>"
+}
+
+def getFormat(type, myText="") {			// Modified from @Stephack Code   
+	if(type == "header-green") return "<div style='color:#ffffff;font-weight: bold;background-color:#1AC9C4;border: 1px solid;box-shadow: 2px 3px #A9A9A9'>${myText}</div>"
+	if(type == "footer-green") return "<div style='color:#ffffff;text-align:center;font-weight: bold;background-color:#1AC9C4;border: 1px solid;box-shadow: 2px 3px #A9A9A9'>${myText}</div>"
+    if(type == "line") return "<hr style='background-color:#1AC9C4; height: 1px; border: 0;'>"
+    if(type == "title") return "<h2 style='color:#1A77C9;font-weight: bold'>${myText}</h2>"
+}
+
+def display() {
+    setVersion()
+    getHeaderAndFooter()
+    theName = app.label
+    if(theName == null || theName == "") theName = "New Child App"
+    if (state.name == theName) {theName = ""} else {theName = " - " + theName}
+    section (getFormat("title", "${getImage("logo")}" + " ${state.name}${theName}")) {
+        paragraph "${state.headerMessage}"
+		paragraph getFormat("line")
+	}
+}
+
+def display2() {
+	section() {
+		paragraph getFormat("line")
+		paragraph "<div style='color:#1A77C9;text-align:center;font-size:20px;font-weight:bold'>${state.name} - ${state.version}</div>"
+        paragraph "${state.footerMessage}"
+	}       
+}
+
+def getHeaderAndFooter() {
+    logTrace ("In getHeaderAndFooter (${state.version})")
+    def params = [
+	    uri: "https://raw.githubusercontent.com/eralbright/eralbright/hubitat/Test.json",
+		requestContentType: "application/json",
+		contentType: "application/json",
+		timeout: 30
+	]
+    
+    try {
+        def result = null
+        httpGet(params) { resp ->
+            state.headerMessage = resp.data.headerMessage
+            state.footerMessage = resp.data.footerMessage
+        }
+        logDebug "In getHeaderAndFooter - headerMessage: ${state.headerMessage}"
+        logDebug "In getHeaderAndFooter - footerMessage: ${state.footerMessage}"
+    }
+    catch (e) {
+        state.headerMessage = "<div style='color:#1A77C9'>Kokopelli Home Automation</div>"
+        state.footerMessage = "<div style='color:#1A77C9;text-align:center'>${state.namespace}  <<-->>  Kokopelli<br></div>"
+    }
+}
