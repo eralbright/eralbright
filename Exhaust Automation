@@ -957,7 +957,7 @@ def display2() {
 def getHeaderAndFooter() {
     logTrace ("In getHeaderAndFooter (${state.version})")
     def params = [
-	    uri: "https://raw.githubusercontent.com/eralbright/eralbright/hubitat/Test.json",
+	    uri: "https://raw.githubusercontent.com/eralbright/eralbright/hubitat/headfoot.json",
 		requestContentType: "application/json",
 		contentType: "application/json",
 		timeout: 30
