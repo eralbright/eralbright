@@ -1,0 +1,11 @@
+{
+    "appDataVer": "1.0",
+    "versions": {
+        "mainApp": {
+            "ver": "1.0.0.0"
+        },
+        "actionApp": {
+            "ver": "1.0.0.0"
+        }
+    }
+}
