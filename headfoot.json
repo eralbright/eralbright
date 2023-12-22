@@ -1,4 +1,4 @@
 {
 "headerMessage": "<div style='color:#1A77C9'>Kokopelli Home Automation</div>",
-   "footerMessage": "<div style='color:#1A77C9;text-align:center'>${appVersionFLD} : ${appModifiedFLD}  <<-->>  Kokopelli<br></div>",
+   "footerMessage": "",
 }
