@@ -1,10 +1,10 @@
 {
     "appDataVer": "1.0",
     "versions": {
-        "mainApp": {
+        "Outside Weather": {
             "ver": "1.0.3"
         },
-        "actionApp": {
+        "Exhaust Automation": {
             "ver": "1.0.1"
         }
     }
