@@ -1,6 +1,6 @@
 {
     "appDataVer": "1.0",
-    "versions": {
+    "applications": {
         "Outside Weather": {
             "ver": "1.0.3"
         },
