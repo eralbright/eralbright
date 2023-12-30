@@ -1,11 +1,25 @@
-/*
-*/
+/** Weather from Open Weather and Weather dot Gov
+ *
+ *  Copyright 2024 Eric Albright - Kokopelli Home Automation - 
+ *                 - most of this is copied from research sources and other operating programs as I learn
+ *                   so Copied. Right.
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ *  in compliance with the License. You may obtain a copy of the License at:
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
+ *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+ *  for the specific language governing permissions and limitations under the License.
+ *
+ */
 
 import groovy.transform.Field
 import java.text.SimpleDateFormat
 
 @Field static final String appVersionFLD  = '3.0.3'
-@Field static final String appModifiedFLD = '2023-12-27'
+@Field static final String appModifiedFLD = '2024-01-01'
 @Field static final String appDescriptionFLD = 'Outside Weather'
 
 
@@ -144,9 +158,22 @@ def changeLogPage() {
             txt += "\n"            
             paragraph "${txt}"
 
-            txt = "   1.0.3 \n"
+            txt = "   2.0.1 \n"
             txt += "       Added Open Weather data... 23-12-27 \n"
-            txt += "\n"            
+            txt += "\n"    
+                        
+            txt = "   3.0.1 \n"
+            txt += "       Modified to array storage ... 23-12-29 \n"
+            txt += "\n"      
+                        
+            txt = "   3.0.2 \n"
+            txt += "       added variable storage ... 23-12-30 \n"
+            txt += "\n"   
+                        
+            txt = "   3.0.3 \n"
+            txt += "       added forcast data ... inprogress \n"
+            txt += "\n"
+            
             paragraph "${txt}"
         }
         // using this for cleanup as I develop...
