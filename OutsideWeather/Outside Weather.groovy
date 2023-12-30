@@ -32,7 +32,7 @@ definition(
     iconUrl: "",
     iconX2Url: "",
     iconX3Url: "",
-//    importUrl: "htggg://raw.githubusercontent.com/bptworld/Hubitat/master/Apps/Weather%20Dot%20Gov/WDG-child.groovy",
+    importUrl: "https://raw.githubusercontent.com/eralbright/eralbright/hubitat/OutsideWeather/Outside%20Weather.groovy",
 )
 
 
