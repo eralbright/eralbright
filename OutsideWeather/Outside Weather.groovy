@@ -14,7 +14,8 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  */
-
+// TODO add forcast information
+// TODO complete adding information from Open Weather so that all information passed is available 
 import groovy.transform.Field
 import java.text.SimpleDateFormat
 
