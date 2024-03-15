@@ -1,10 +1,10 @@
 {
-  "domain": "thermal_comfort",
-  "name": "Thermal Comfort",
-  "codeowners": ["@dolezsa"],
+  "domain": "dew_point",
+  "name": "Dew Point",
+  "codeowners": ["@kokopelli"],
   "config_flow": true,
-  "documentation": "https://github.com/dolezsa/thermal_comfort/blob/master/README.md",
+  "documentation": "https://github.com/eralbirght/dewpoint/README.md",
   "iot_class": "calculated",
-  "issue_tracker": "https://github.com/dolezsa/thermal_comfort/issues",
-  "version": "2.2.2"
+  "issue_tracker": "https://github.com/eralbirght/dewpoint/issues",
+  "version": "1.0.0"
 }
