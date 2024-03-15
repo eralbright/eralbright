@@ -6,7 +6,7 @@
     },
     "step": {
       "init": {
-        "title": "Paramètres de Thermal comfort",
+        "title": "Paramètres de Point de rosée",
         "data": {
           "temperature_sensor": "Capteur de température",
           "humidity_sensor": "Capteur d'humidité",
@@ -29,7 +29,7 @@
     },
     "step": {
       "user": {
-        "title": "Paramètres de Thermal comfort",
+        "title": "Paramètres de Point de rosée",
         "data": {
           "name": "Nom",
           "temperature_sensor": "Capteur de température",
