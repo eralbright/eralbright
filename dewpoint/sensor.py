@@ -1,4 +1,4 @@
-"""Sensor platform for thermal_comfort."""
+"""Sensor platform for dew_point."""
 from asyncio import Lock
 from dataclasses import dataclass
 from datetime import timedelta
@@ -73,11 +73,9 @@ DISPLAY_PRECISION = 2
 
 
 class LegacySensorType(StrEnum):
-    """Sensors names from thermal comfort < 2.0."""
-
-    THERMAL_PERCEPTION = "thermal_perception"
-    SIMMER_INDEX = "simmer_index"
-    SIMMER_ZONE = "simmer_zone"
+    """Sensors names from Dew Point < 2.0."""
+# future
+    ABSOLUTE_HUMIDITY = "absolute_humidity"
 
 
 class SensorType(StrEnum):
@@ -352,10 +350,10 @@ def compute_once_lock(sensor_type):
 
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """Set up the Thermal Comfort sensors."""
+    """Set up the Dew Point sensors."""
     if discovery_info is None:
         _LOGGER.warning(
-            "Legacy YAML configuration is unsupported in 2.0. You should update to the new yaml format: https://github.com/dolezsa/thermal_comfort/blob/master/documentation/yaml.md"
+            "Legacy YAML configuration is unsupported in 2.0. You should update to the new yaml format: https://github.com/////documentation/yaml.md"
         )
         devices = [
             dict(device_config, **{CONF_NAME: device_name})
@@ -370,7 +368,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
 
     for device_config in devices:
         device_config = options | device_config
-        compute_device = DeviceThermalComfort(
+        compute_device = DeviceDewPoint(
             hass=hass,
             name=device_config.get(CONF_NAME),
             unique_id=device_config.get(CONF_UNIQUE_ID),
@@ -383,7 +381,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         )
 
         sensors += [
-            SensorThermalComfort(
+            SensorDewPoint(
                 device=compute_device,
                 icon_template=device_config.get(CONF_ICON_TEMPLATE),
                 entity_picture_template=device_config.get(CONF_ENTITY_PICTURE_TEMPLATE),
@@ -417,7 +415,7 @@ async def async_setup_entry(
         data[CONF_SCAN_INTERVAL] = SCAN_INTERVAL_DEFAULT
 
     _LOGGER.debug("async_setup_entry: %s", data)
-    compute_device = DeviceThermalComfort(
+    compute_device = DeviceDewPoint(
         hass=hass,
         name=data[CONF_NAME],
         unique_id=f"{config_entry.unique_id}",
@@ -430,7 +428,7 @@ async def async_setup_entry(
     )
 
     entities: list[SensorThermalComfort] = [
-        SensorThermalComfort(
+        SensorDewPoint(
             device=compute_device,
             sensor_type=sensor_type,
             custom_icons=data[CONF_CUSTOM_ICONS],
@@ -453,12 +451,12 @@ def id_generator(unique_id: str, sensor_type: str) -> str:
     return unique_id + sensor_type
 
 
-class SensorThermalComfort(SensorEntity):
-    """Representation of a Thermal Comfort Sensor."""
+class SensorDewPoint(SensorEntity):
+    """Representation of a Dew Point Sensor."""
 
     def __init__(
         self,
-        device: "DeviceThermalComfort",
+        device: "DeviceDewPoint",
         sensor_type: SensorType,
         icon_template: Template = None,
         entity_picture_template: Template = None,
@@ -572,14 +570,14 @@ class SensorThermalComfort(SensorEntity):
 
 @dataclass
 class ComputeState:
-    """Thermal Comfort Calculation State."""
+    """Dew Point Calculation State."""
 
     needs_update: bool = False
     lock: Lock = None
 
 
-class DeviceThermalComfort:
-    """Representation of a Thermal Comfort Sensor."""
+class DeviceDewPoint:
+    """Representation of a Dew Point Sensor."""
 
     def __init__(
         self,
@@ -687,7 +685,7 @@ class DeviceThermalComfort:
 #        VP = pow(10, SUM - 3) * self._humidity
 #        Td = math.log(VP / 0.61078)
 #        Td = (241.88 * Td) / (17.558 - Td)
-        # Newer better calculation of Dew Point
+        # Newer better calculation of Dew Point @kokopelli
         Tf = TemperatureConverter.convert(
             self._temperature, UnitOfTemperature.CELSIUS, UnitOfTemperature.FAHRENHEIT
         )
