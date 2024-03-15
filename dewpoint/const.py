@@ -1,11 +1,11 @@
-"""General thermal_comfort constants."""
+"""General dew_point constants."""
 from homeassistant.const import Platform
 
-DOMAIN = "thermal_comfort"
+DOMAIN = "dew_point"
 PLATFORMS = [Platform.SENSOR]
 CONF_TEMPERATURE_SENSOR = "temperature_sensor"
 CONF_HUMIDITY_SENSOR = "humidity_sensor"
 CONF_POLL = "poll"
 
-DEFAULT_NAME = "Thermal Comfort"
+DEFAULT_NAME = "Dew Point"
 UPDATE_LISTENER = "update_listener"
