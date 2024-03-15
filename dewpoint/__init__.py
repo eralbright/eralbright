@@ -1,7 +1,7 @@
 """Custom integration to integrate thermal_comfort with Home Assistant.
 
 For more details about this integration, please refer to
-https://github.com/dolezsa/thermal_comfort
+https://github.com/eralbright/dewpoint/__init__.py
 """
 from __future__ import annotations
 
@@ -86,26 +86,26 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
-async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry):
-    """Migrate old entry."""
-    _LOGGER.debug("Migrating from version %s", config_entry.version)
-
-    if config_entry.version == 1:
-
-        def update_unique_id(entry: RegistryEntry):
-            """Update unique_id of changed sensor names."""
-            if LegacySensorType.THERMAL_PERCEPTION in entry.unique_id:
-                return {"new_unique_id": entry.unique_id.replace(LegacySensorType.THERMAL_PERCEPTION, SensorType.DEW_POINT_PERCEPTION)}
-            if LegacySensorType.SIMMER_INDEX in entry.unique_id:
-                return {"new_unique_id": entry.unique_id.replace(LegacySensorType.SIMMER_INDEX, SensorType.SUMMER_SIMMER_INDEX)}
-            if LegacySensorType.SIMMER_ZONE in entry.unique_id:
-                return {"new_unique_id": entry.unique_id.replace(LegacySensorType.SIMMER_ZONE, SensorType.SUMMER_SIMMER_PERCEPTION)}
-
-        await async_migrate_entries(hass, config_entry.entry_id, update_unique_id)
-        config_entry.version = 2
-
-    _LOGGER.info("Migration to version %s successful", config_entry.version)
-
+ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry):
+#    """Migrate old entry."""
+#    _LOGGER.debug("Migrating from version %s", config_entry.version)
+#
+#    if config_entry.version == 1:
+#
+#        def update_unique_id(entry: RegistryEntry):
+#            """Update unique_id of changed sensor names."""
+#            if LegacySensorType.THERMAL_PERCEPTION in entry.unique_id:
+#                return {"new_unique_id": entry.unique_id.replace(LegacySensorType.THERMAL_PERCEPTION, SensorType.DEW_POINT_PERCEPTION)}
+#            if LegacySensorType.SIMMER_INDEX in entry.unique_id:
+#                return {"new_unique_id": entry.unique_id.replace(LegacySensorType.SIMMER_INDEX, SensorType.SUMMER_SIMMER_INDEX)}
+#            if LegacySensorType.SIMMER_ZONE in entry.unique_id:
+#                return {"new_unique_id": entry.unique_id.replace(LegacySensorType.SIMMER_ZONE, SensorType.SUMMER_SIMMER_PERCEPTION)}
+#
+#        await async_migrate_entries(hass, config_entry.entry_id, update_unique_id)
+#        config_entry.version = 2
+#
+#    _LOGGER.info("Migration to version %s successful", config_entry.version)
+#
     return True
 
 
@@ -133,7 +133,7 @@ CONFIG_SCHEMA = vol.Schema(
 )
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the thermal_comfort integration."""
+    """Set up the dew_point integration."""
     if DOMAIN in config:
         await _process_config(hass, config)
 
